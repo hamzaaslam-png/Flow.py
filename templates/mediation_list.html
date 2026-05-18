@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Mediation groups · Mediation Tool{% endblock %}
+{% block content %}
+<section class="page-head row-between">
+  <div><p class="eyebrow">Mediation</p><h1 class="display">Your mediation groups</h1></div>
+  <a href="/mediation/builder" class="btn-primary">+ Open Builder</a>
+</section>
+{% if groups %}
+<table class="table">
+  <thead><tr><th>Name</th><th>Source Ad Unit</th><th>Format</th><th>Platform</th><th>Countries</th><th>Source eCPM</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+  <tbody>
+    {% for g in groups %}
+    <tr>
+      <td>{{ g.name }}</td>
+      <td class="mono small">{{ g.target_ad_unit_id }}</td>
+      <td><span class="pill">{{ g.ad_format }}</span></td>
+      <td><span class="pill pill-{{ g.platform|lower }}">{{ g.platform }}</span></td>
+      <td class="small">{% if g.country_mode == "GLOBAL" %}Global{% elif g.country_mode == "INCLUDE" %}+{{ g.countries|length }}{% else %}−{{ g.countries|length }}{% endif %}</td>
+      <td class="small">${{ "%.2f"|format(g.base_avg_ecpm) }}</td>
+      <td><span class="status status-{{ g.status|lower }}">{{ g.status }}</span></td>
+      <td class="small">{{ g.updated_at.strftime("%Y-%m-%d %H:%M") }}</td>
+      <td><a href="/mediation/{{ g.id }}">Open →</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}<div class="empty"><p>No mediation groups yet. <a href="/mediation/builder">Open the Builder →</a></p></div>{% endif %}
+{% endblock %}

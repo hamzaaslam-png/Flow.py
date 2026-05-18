@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} · Mediation Tool{% endblock %}
+{% block content %}
+<section class="page-head row-between">
+  <div>
+    <p class="eyebrow"><a href="/mediation">← Mediation</a></p>
+    <h1 class="display">{{ group.name }}</h1>
+    <p class="mono small">{{ group.ad_format }} · {{ group.platform }} ·
+      {% if group.country_mode == "GLOBAL" %}global
+      {% elif group.country_mode == "INCLUDE" %}include {{ group.countries|join(", ") }}
+      {% else %}exclude {{ group.countries|join(", ") }}{% endif %}
+      · floor: {{ group.floor_type.replace("_"," ").title() }}
+      · ad unit: <code>{{ group.target_ad_unit_id }}</code>
+      {% if group.admob_group_id %}· <strong style="color:var(--good)">AdMob group ID: <code>{{ group.admob_group_id }}</code></strong>{% endif %}
+    </p>
+  </div>
+  <div class="actions-col">
+    <span class="status status-{{ group.status|lower }}">{{ group.status }}</span>
+    <a href="/mediation/{{ group.id }}/export.json" class="btn-secondary" target="_blank">Export JSON</a>
+    <form method="post" action="/mediation/{{ group.id }}/delete" onsubmit="return confirm('Delete this group?');"><button type="submit" class="btn-danger">Delete</button></form>
+  </div>
+</section>
+<h2 class="section-title">Report snapshot</h2>
+{% if group.report_metrics %}
+<div class="metric-grid">
+  <div class="metric"><span class="metric-label">Source Avg eCPM</span><span class="metric-value">${{ "%.2f"|format(group.report_metrics.get("ecpm_usd", 0)) }}</span></div>
+  <div class="metric"><span class="metric-label">Revenue</span><span class="metric-value good">${{ "%.2f"|format(group.report_metrics.get("revenue_usd", 0)) }}</span></div>
+  <div class="metric"><span class="metric-label">Match Rate</span><span class="metric-value">{{ "%.2f"|format((group.report_metrics.get("match_rate", 0))*100) }}%</span></div>
+  <div class="metric"><span class="metric-label">Show Rate</span><span class="metric-value">{{ "%.2f"|format((group.report_metrics.get("show_rate", 0))*100) }}%</span></div>
+  <div class="metric"><span class="metric-label">Fill Rate</span><span class="metric-value">{{ "%.2f"|format((group.report_metrics.get("fill_rate", 0))*100) }}%</span></div>
+  <div class="metric"><span class="metric-label">RPM</span><span class="metric-value">${{ "%.2f"|format(group.report_metrics.get("rpm_usd", 0)) }}</span></div>
+  <div class="metric"><span class="metric-label">Requests</span><span class="metric-value">{{ "{:,}".format(group.report_metrics.get("ad_requests", 0)) }}</span></div>
+  <div class="metric"><span class="metric-label">Impressions</span><span class="metric-value">{{ "{:,}".format(group.report_metrics.get("impressions", 0)) }}</span></div>
+</div>
+{% else %}<p class="muted">No report snapshot saved.</p>{% endif %}
+<h2 class="section-title">Waterfall lines</h2>
+{% if group.waterfall_lines %}
+<table class="table">
+  <thead><tr><th>Tier</th><th>Line name</th><th>eCPM</th><th>Source</th><th>Mode</th><th>Tier ad unit ID</th><th>Enabled</th></tr></thead>
+  <tbody>{% for line in group.waterfall_lines %}<tr><td>{{ line.priority + 1 }}</td><td>{{ line.line_name }}</td><td class="mono">${{ "%.2f"|format(line.ecpm_usd) }}</td><td>{{ line.network_code or "ADMOB" }}</td><td>{{ line.cpm_mode }}</td><td class="mono small">{{ line.admob_line_key or "—" }}</td><td>{{ "yes" if line.enabled else "no" }}</td></tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">No waterfall lines.</p>{% endif %}
+<div class="callout">
+  <strong>Group structure:</strong> targets source ad unit + N tier ad units. Waterfall has N MANUAL AdMob Network lines (one per tier eCPM). Bidding has AdMob Network LIVE plus one LIVE line per replicated 3P network.
+</div>
+{% if group.last_push_response %}
+<h2 class="section-title">Last push response (forensics)</h2>
+<pre class="forensic-block">{{ group.last_push_response }}</pre>
+{% endif %}
+{% endblock %}

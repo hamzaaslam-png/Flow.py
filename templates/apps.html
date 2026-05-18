@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Apps · Mediation Tool{% endblock %}
+{% block content %}
+<section class="page-head row-between">
+  <div><p class="eyebrow">Apps</p><h1 class="display">Your AdMob apps</h1></div>
+  <form method="post" action="/apps/sync"><button class="btn-secondary" type="submit">↻ Sync from AdMob</button></form>
+</section>
+{% if apps %}
+<table class="table">
+  <thead><tr><th>Name</th><th>Platform</th><th>AdMob App ID</th><th>Store ID</th><th>Ad units</th><th></th></tr></thead>
+  <tbody>
+    {% for app in apps %}
+    <tr>
+      <td>{{ app.name or "(unnamed)" }}</td>
+      <td><span class="pill pill-{{ app.platform|lower }}">{{ app.platform }}</span></td>
+      <td class="mono small">{{ app.app_id }}</td>
+      <td class="mono small">{{ app.package_name or "—" }}</td>
+      <td>{{ app.ad_units|length }}</td>
+      <td><a href="/apps/{{ app.id }}">Open →</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}<div class="empty"><p>No apps cached yet. Click <strong>Sync from AdMob</strong> to pull them from the API.</p></div>{% endif %}
+{% endblock %}

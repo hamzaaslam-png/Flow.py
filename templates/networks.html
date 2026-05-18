@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Networks · Mediation Tool{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">3rd-party networks</p>
+  <h1 class="display">Network credentials</h1>
+  <p class="lede">Per-app credentials for each ad network. Stored encrypted. Used as documentation; the actual mappings are read live from AdMob during the push.</p>
+</section>
+
+{% if not apps %}
+<div class="empty">
+  <p>No apps cached yet. <form method="post" action="/apps/sync" style="display:inline"><button class="btn-primary" type="submit">↻ Sync from AdMob</button></form></p>
+</div>
+{% else %}
+
+<div class="networks-page">
+  <aside class="net-app-list">
+    <h3>Apps</h3>
+    {% for a in apps %}
+      <a href="#app-{{ a.id }}" class="net-app-link">{{ a.name or a.app_id }}<br><span class="small mono muted">{{ a.platform }}</span></a>
+    {% endfor %}
+  </aside>
+
+  <div class="net-app-content">
+    {% for a in apps %}
+    <section id="app-{{ a.id }}" class="net-app-section">
+      <h2 class="section-title">{{ a.name or "(unnamed app)" }} <span class="pill pill-{{ a.platform|lower }}">{{ a.platform }}</span></h2>
+      <p class="mono small muted">{{ a.app_id }}</p>
+
+      <div class="net-tabs">
+        {% for net in networks %}
+          <button type="button" class="net-tab {% if loop.first %}is-active{% endif %}" data-tab="net-{{ a.id }}-{{ net.code }}">{{ net.name }}</button>
+        {% endfor %}
+      </div>
+
+      {% for net in networks %}
+      <div class="net-tab-content {% if loop.first %}is-active{% endif %}" id="net-{{ a.id }}-{{ net.code }}">
+        <form method="post" action="/networks/{{ a.id }}/{{ net.code }}/save-app" class="net-form">
+          <h4>App-level credentials</h4>
+          {% if net.app_fields %}
+            {% set app_creds = app_creds_by_app_net.get((a.id, net.code), {}) %}
+            <div class="grid grid-2">
+              {% for f in net.app_fields %}
+                <label><span class="lbl">{{ f.label }}</span>
+                  <input name="{{ f.key }}" type="{{ f.type }}" value="{{ app_creds.get(f.key, '') }}" placeholder="{{ f.help }}" />
+                </label>
+              {% endfor %}
+            </div>
+            <button class="btn-secondary btn-sm" type="submit">Save app credentials</button>
+          {% else %}
+            <p class="muted small">No app-level credentials needed for {{ net.name }}.</p>
+          {% endif %}
+        </form>
+
+        <h4 style="margin-top:24px">Per ad unit ({{ a.ad_units|length }})</h4>
+        {% if a.ad_units %}
+          {% for u in a.ad_units %}
+            {% set mapping = unit_creds_by_key.get((a.id, u.ad_unit_id, net.code), {}) %}
+            <form method="post" action="/networks/{{ a.id }}/{{ net.code }}/save-unit/{{ u.ad_unit_id|urlencode }}" class="net-unit-row">
+              <div class="net-unit-head">
+                <div>
+                  <div class="adunit-name">{{ u.name or "(unnamed)" }} <span class="pill">{{ u.ad_format }}</span></div>
+                  <div class="mono small muted">{{ u.ad_unit_id }}</div>
+                </div>
+                {% if mapping.admob_mapping_id %}
+                  <span class="status status-pushed">Mapped · {{ mapping.admob_mapping_id }}</span>
+                {% endif %}
+              </div>
+              <div class="grid grid-2">
+                {% for f in net.ad_unit_fields %}
+                  <label><span class="lbl">{{ f.label }}</span>
+                    <input name="{{ f.key }}" type="{{ f.type }}" value="{{ mapping.fields.get(f.key, '') if mapping else '' }}" placeholder="{{ f.help }}" />
+                  </label>
+                {% endfor %}
+              </div>
+              <button class="btn-secondary btn-sm" type="submit">Save</button>
+            </form>
+          {% endfor %}
+        {% else %}
+          <p class="muted small">No ad units cached for this app.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </section>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+document.querySelectorAll(".net-tab").forEach(t => t.addEventListener("click", () => {
+  const target = t.dataset.tab;
+  const sec = t.closest(".net-app-section");
+  sec.querySelectorAll(".net-tab").forEach(x => x.classList.toggle("is-active", x === t));
+  sec.querySelectorAll(".net-tab-content").forEach(x => x.classList.toggle("is-active", x.id === target));
+}));
+</script>
+{% endif %}
+{% endblock %}

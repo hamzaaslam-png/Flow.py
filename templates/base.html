@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}AdMob Mediation Tool{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><a href="/" class="brand-link"><span class="brand-mark">⌬</span><span class="brand-name">Mediation<span class="brand-dot">.</span>Tool</span></a></div>
+    <nav class="topnav">
+      {% if user and user.id %}
+        <a href="/dashboard">Dashboard</a>
+        <a href="/apps">Apps</a>
+        <a href="/networks">Networks</a>
+        <a href="/mediation">Mediation</a>
+        <a href="/mediation/builder" class="cta">+ Builder</a>
+        <span class="sep"></span>
+        <span class="user-chip">{% if user.picture %}<img src="{{ user.picture }}" alt="" />{% endif %}<span>{{ user.email }}</span></span>
+        <a href="/auth/logout" class="logout">Sign out</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="content">{% block content %}{% endblock %}</main>
+  <footer class="footer"><span>AdMob Mediation Tool</span><span class="footer-sep">·</span><span>1 group per source · Tier ad units · Replicated bidding mappings · Live audit</span></footer>
+</body>
+</html>

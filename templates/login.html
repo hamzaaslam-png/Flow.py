@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Mediation Tool{% endblock %}
+{% block content %}
+<section class="login-wrap">
+  <div class="login-card">
+    <p class="eyebrow">AdMob mediation workflow</p>
+    <h1 class="display">Connect your <em>AdMob</em> account.</h1>
+    <p class="lede">Sign in with Google. The tool pulls your AdMob apps, ad units, and last-7-day metrics live from the AdMob API, then helps you build mediation waterfalls — one mediation group per source ad unit, with N labeled tier ad units as lines.</p>
+    <a class="btn-primary" href="/auth/login"><span class="g-mark">G</span>Continue with Google</a>
+    <p class="fineprint">Requires AdMob API scopes: <code>admob.readonly</code>, <code>admob.report</code>, <code>admob.monetization</code>.</p>
+  </div>
+  <aside class="login-side">
+    <h3>Workflow</h3>
+    <ol>
+      <li>Sign in with Google (OAuth)</li>
+      <li>Sync your AdMob apps + ad units</li>
+      <li>Open the Builder, pick app + ad units</li>
+      <li>Choose country targeting + waterfall depth</li>
+      <li>Fetch live AdMob report (7 days)</li>
+      <li>Tool calculates waterfall eCPM values</li>
+      <li>Push: tier ad units + 1 mediation group with N waterfall lines</li>
+    </ol>
+  </aside>
+</section>
+{% endblock %}

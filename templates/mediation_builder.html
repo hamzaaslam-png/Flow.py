@@ -1,0 +1,658 @@
+{% extends "base.html" %}
+{% block title %}Mediation Builder · Mediation Tool{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">Builder</p>
+  <h1 class="display">Mediation builder</h1>
+  <p class="lede">Pick app + source ad units → choose targeting → fetch live AdMob report → push creates <strong>N tier ad units, replicated bidding mappings, and ONE mediation group per source ad unit</strong>. AdMob Network is the default — present even when no third-party bidding networks are configured.</p>
+</section>
+
+{% if not apps %}
+<div class="empty">
+  <p>You don't have any apps cached yet. Sync them first.</p>
+  <form method="post" action="/apps/sync"><button class="btn-primary" type="submit">↻ Sync from AdMob</button></form>
+</div>
+{% else %}
+
+<div class="builder-grid">
+  <div>
+    <fieldset class="builder-step">
+      <legend><span class="num">01</span> Select App</legend>
+      <select id="app-select">
+        <option value="">— Choose an app —</option>
+        {% for a in apps %}
+          <option value="{{ a.id }}" data-platform="{{ a.platform }}">{{ a.name or a.app_id }} · {{ a.platform }} · {{ a.app_id }}</option>
+        {% endfor %}
+      </select>
+    </fieldset>
+
+    <fieldset class="builder-step" id="adunit-step" style="display:none">
+      <legend><span class="num">02</span> Select Source Ad Units</legend>
+      <div class="row-between" style="margin-bottom:10px">
+        <input type="text" id="adunit-search" placeholder="Filter ad units…" />
+        <div>
+          <button type="button" class="btn-ghost btn-sm" id="adunit-all">Select all</button>
+          <button type="button" class="btn-ghost btn-sm" id="adunit-none">Clear</button>
+        </div>
+      </div>
+      <div id="adunit-list" class="adunit-cards"></div>
+    </fieldset>
+
+    <fieldset class="builder-step">
+      <legend><span class="num">03</span> Country Targeting</legend>
+      <div class="radio-row">
+        <label><input type="radio" name="country_mode" value="GLOBAL" checked /> <span><b>Global</b> — target all countries</span></label>
+        <label><input type="radio" name="country_mode" value="INCLUDE" /> <span><b>Choose</b> specific countries</span></label>
+        <label><input type="radio" name="country_mode" value="EXCLUDE" /> <span><b>Exclude</b> specific countries (stored locally; AdMob API has no exclude field)</span></label>
+      </div>
+      <div id="country-picker" style="display:none">
+        <input type="text" id="country-search" placeholder="Search countries…" />
+        <div id="country-list" class="country-chips"></div>
+        <p class="muted small">Or paste comma-separated ISO-2 codes:</p>
+        <input type="text" id="country-paste" placeholder="US, GB, DE, JP" />
+      </div>
+    </fieldset>
+
+    <fieldset class="builder-step">
+      <legend><span class="num">04</span> Waterfall Depth &amp; Bidding</legend>
+      <div class="grid grid-2">
+        <label><span class="lbl">Number of tiers (1–{{ max_lines }})</span>
+          <input type="number" id="line-count" min="1" max="{{ max_lines }}" value="{{ default_lines }}" /></label>
+        <label><span class="lbl">Floor type (recorded locally)</span>
+          <select id="floor-type">
+            {% for f in floor_types %}<option value="{{ f }}">{{ f.replace("_"," ").title() }}</option>{% endfor %}
+          </select></label>
+      </div>
+      <label class="check-row"><input type="checkbox" id="unique-names" checked /> Append random suffix to tier names</label>
+      <label class="check-row"><input type="checkbox" id="use-internal-api" /> <span><b>AdMob internal API</b> — create real AdMob Network <b>waterfall</b> lines on the backend (uses your saved AdMob session)</span></label>
+      <div id="internal-api-panel" style="display:none; margin-top:8px; padding:10px; border:1px solid var(--line); border-radius:8px">
+        <div class="small" id="session-status" style="margin-bottom:6px"></div>
+        <p class="muted small" style="margin:0 0 6px">Paste your AdMob cURL <b>once</b> — flow.py stores it encrypted and reuses it on every run. To get it: open <b>admob.google.com</b> → <b>F12</b> → <b>Network</b> tab → click any request whose URL contains <b>/rpc/</b> → right-click → Copy → <b>Copy as cURL (bash)</b>.</p>
+        <textarea id="session-curl" rows="4" spellcheck="false" placeholder="curl 'https://admob.google.com/v2/...rpc...' -H '...' -b '...'" style="width:100%; font-family:monospace; font-size:11px"></textarea>
+        <div style="margin-top:6px"><button type="button" class="btn-primary btn-sm" id="save-session-btn">Save AdMob session</button></div>
+      </div>
+      <div class="muted small" style="padding:6px 0">AdMob Network only mode — creates tier ad units + a mediation group with MANUAL AdMob Network waterfall lines + AdMob Network LIVE bidding line. No 3P bidding networks.</div>
+      <div class="default-network-note">
+        <strong>⚡ AdMob Network is always present.</strong> Every mediation group has N MANUAL AdMob Network waterfall lines (one per tier eCPM) plus an explicit AdMob Network LIVE bidding line. Third-party bidding networks are added when /networks credentials exist for them.
+      </div>
+      <label class="check-row"><span class="lbl">Name prefix</span>
+        <input type="text" id="name-prefix" value="Global" /></label>
+    </fieldset>
+
+    <div class="form-actions">
+      <button class="btn-primary" id="fetch-report-btn" disabled>📊 Fetch AdMob Report (Last 7 Days)</button>
+      <a href="/mediation" class="btn-ghost">Cancel</a>
+    </div>
+  </div>
+
+  <div>
+    <div class="preview-panel" id="preview-panel">
+      <p class="eyebrow">Live preview</p>
+      <h3 class="section-title" style="margin-top:6px">Selected configuration</h3>
+      <div id="preview-summary" class="muted">No app selected yet.</div>
+    </div>
+  </div>
+</div>
+
+<section id="report-section" style="display:none">
+  <h2 class="section-title">Ad Unit Reports</h2>
+  <p class="muted small" id="report-date-range"></p>
+  <div id="report-cards"></div>
+  <div class="calc-explainer">
+    <strong>Waterfall Formula:</strong>
+    Line 1 = avg eCPM × <span class="mono">{{ top_mult }}</span>,
+    then each next line = previous × <span class="mono">{{ step_factor }}</span>.
+  </div>
+  <div class="form-actions">
+    <button class="btn-primary btn-lg" id="push-btn">▶ Create mediation group + waterfall + bidding</button>
+    <button class="btn-secondary btn-lg" id="generate-btn">Save locally only (preview/draft)</button>
+  </div>
+
+  <div class="form-actions" id="internal-actions" style="display:none">
+    <button class="btn-primary btn-lg" id="internal-push-btn">▶ Create real AdMob Network waterfall (internal API)</button>
+  </div>
+  <div id="internal-result" class="muted small" style="display:none; white-space:pre-wrap; margin-top:10px; font-family:monospace; background:rgba(0,0,0,0.04); padding:10px; border-radius:8px"></div>
+
+  <hr style="margin: 32px 0; border: 0; border-top: 1px solid var(--line)" />
+
+  <h3 class="section-title" style="margin-top: 0">Advanced: Push lines to an existing AdMob group</h3>
+  <p class="muted small" style="margin: 6px 0 14px">
+    For Mediation Pro user-value-segment groups. Uses the eCPMs from the first selected ad unit's tier table.
+  </p>
+
+  <div class="form-actions" style="margin-bottom: 14px">
+    <button type="button" class="btn-secondary btn-sm" id="fetch-admob-groups-btn">↻ Load my AdMob groups</button>
+  </div>
+
+  <div id="admob-groups-list" style="display:none">
+    <label><span class="lbl">Pick the target group</span>
+      <select id="target-group-select">
+        <option value="">— Choose an AdMob group —</option>
+      </select>
+    </label>
+    <p class="muted small" id="target-group-info" style="margin: 6px 0"></p>
+    <div class="form-actions">
+      <button type="button" class="btn-primary btn-lg" id="push-existing-btn" disabled>▶ Patch lines into selected group</button>
+    </div>
+  </div>
+
+</section>
+
+{% endif %}
+
+<script>
+const APP_AD_UNITS = {{ ad_units_by_app|tojson }};
+const COUNTRIES = {{ countries|tojson }};
+const MAX_LINES = {{ max_lines }};
+const DEFAULT_LINES = {{ default_lines }};
+const EXISTING_GROUPS = {{ existing_groups|tojson }};
+const ADMOB_SESSION_SAVED = {{ 'true' if admob_session_saved else 'false' }};
+const ADMOB_SESSION_AT = "{{ admob_session_at }}";
+
+const $ = sel => document.querySelector(sel);
+const $$ = sel => [...document.querySelectorAll(sel)];
+
+const state = {
+  app_id: null, app_label: "", platform: "",
+  ad_units: [],
+  country_mode: "GLOBAL",
+  countries: new Set(),
+  line_count: DEFAULT_LINES,
+  floor_type: "{{ floor_types[0] }}",
+  unique_names: true,
+  include_bidding_networks: false,
+  use_internal_api: false,
+  name_prefix: "Global",
+  report: null,
+};
+
+function updatePreview() {
+  const el = $("#preview-summary");
+  if (!state.app_id) { el.innerHTML = '<span class="muted">No app selected yet.</span>'; return; }
+  const lines = [];
+  lines.push(`<div class="kv"><span>App</span><b>${state.app_label || ""}</b></div>`);
+  lines.push(`<div class="kv"><span>Source ad units</span><b>${state.ad_units.length}</b></div>`);
+  let c;
+  if (state.country_mode === "GLOBAL") c = "Global";
+  else if (state.countries.size === 0) c = `${state.country_mode === "INCLUDE" ? "Choose" : "Exclude"} (none)`;
+  else c = `${state.country_mode === "INCLUDE" ? "+" : "−"}${state.countries.size}: ${[...state.countries].join(", ")}`;
+  lines.push(`<div class="kv"><span>Countries</span><b>${c}</b></div>`);
+  lines.push(`<div class="kv"><span>Tiers per ad unit</span><b>${state.line_count}</b></div>`);
+  lines.push(`<div class="kv"><span>Bidding</span><b>${state.include_bidding_networks ? "AdMob Network + replicated third-party" : "AdMob Network only (default)"}</b></div>`);
+  const totalAdUnits = state.ad_units.length * state.line_count;
+  lines.push(`<div class="kv"><span>Will create</span><b>${totalAdUnits} tier ad unit(s) + ${state.ad_units.length} mediation group(s)</b></div>`);
+  lines.push(`<div class="kv"><span>Group targeting</span><b>source + ${state.line_count} tier ad units each</b></div>`);
+  el.innerHTML = lines.join("");
+  const btn = $("#fetch-report-btn");
+  if (btn) btn.disabled = !(state.app_id && state.ad_units.length > 0);
+}
+
+function renderAdUnits() {
+  const list = APP_AD_UNITS[state.app_id] || [];
+  const wrap = $("#adunit-list");
+  const filter = ($("#adunit-search").value || "").toLowerCase();
+  wrap.innerHTML = "";
+  const filtered = list.filter(u => !filter || (u.name||"").toLowerCase().includes(filter) || u.ad_unit_id.toLowerCase().includes(filter) || (u.ad_format||"").toLowerCase().includes(filter));
+  if (!filtered.length) { wrap.innerHTML = '<p class="muted small">No ad units match.</p>'; return; }
+  filtered.forEach(u => {
+    const sel = state.ad_units.some(s => s.id === u.id);
+    const card = document.createElement("div");
+    card.className = "adunit-card" + (sel ? " is-selected" : "");
+    const existing = EXISTING_GROUPS[u.ad_unit_id] || [];
+    const existingInfo = existing.length
+      ? `<div class="small muted" style="margin-top:6px">${existing.length} existing group(s): ` +
+        existing.slice(0, 3).map(g => `<a href="/mediation/${g.id}" target="_blank">${g.name}</a>` + (g.admob_group_id ? ` <span class="pill pill-good">in AdMob</span>` : "")).join(", ") +
+        (existing.length > 3 ? `, +${existing.length - 3} more` : "") +
+        `</div>`
+      : "";
+    card.innerHTML = `<div><div class="adunit-name">${u.name || "(unnamed)"} <span class="pill">${u.ad_format}</span></div><div class="adunit-id mono small">${u.ad_unit_id}</div>${existingInfo}</div><button type="button" class="btn-ghost btn-sm">${sel ? "Selected ✓" : "Select"}</button>`;
+    card.querySelector("button").addEventListener("click", () => {
+      if (sel) state.ad_units = state.ad_units.filter(s => s.id !== u.id);
+      else state.ad_units.push(u);
+      renderAdUnits(); updatePreview();
+    });
+    wrap.appendChild(card);
+  });
+}
+
+function renderCountries() {
+  const filter = ($("#country-search").value || "").toLowerCase();
+  const wrap = $("#country-list");
+  wrap.innerHTML = "";
+  COUNTRIES.filter(c => !filter || c.name.toLowerCase().includes(filter) || c.code.toLowerCase().includes(filter)).forEach(c => {
+    const on = state.countries.has(c.code);
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "country-chip" + (on ? " is-selected" : "");
+    chip.textContent = `${c.code} · ${c.name}`;
+    chip.addEventListener("click", () => {
+      if (on) state.countries.delete(c.code); else state.countries.add(c.code);
+      renderCountries(); updatePreview();
+    });
+    wrap.appendChild(chip);
+  });
+}
+
+$("#app-select").addEventListener("change", e => {
+  state.app_id = e.target.value || null;
+  const opt = e.target.options[e.target.selectedIndex];
+  state.app_label = opt.textContent;
+  state.platform = (opt.dataset.platform || "").toUpperCase();
+  state.ad_units = [];
+  $("#adunit-step").style.display = state.app_id ? "" : "none";
+  if (state.app_id) renderAdUnits();
+  updatePreview();
+});
+$("#adunit-search").addEventListener("input", renderAdUnits);
+$("#adunit-all").addEventListener("click", () => { state.ad_units = [...(APP_AD_UNITS[state.app_id] || [])]; renderAdUnits(); updatePreview(); });
+$("#adunit-none").addEventListener("click", () => { state.ad_units = []; renderAdUnits(); updatePreview(); });
+$$('input[name="country_mode"]').forEach(r => r.addEventListener("change", () => {
+  const mode = document.querySelector('input[name="country_mode"]:checked').value;
+  state.country_mode = mode;
+  $("#country-picker").style.display = mode === "GLOBAL" ? "none" : "";
+  if (mode === "GLOBAL") state.countries.clear();
+  if (mode !== "GLOBAL") renderCountries();
+  updatePreview();
+}));
+$("#country-search").addEventListener("input", renderCountries);
+$("#country-paste").addEventListener("change", e => {
+  e.target.value.split(",").map(s => s.trim().toUpperCase()).filter(Boolean).forEach(c => state.countries.add(c));
+  renderCountries(); updatePreview();
+});
+$("#line-count").addEventListener("change", e => { state.line_count = Math.max(1, Math.min(MAX_LINES, +e.target.value || DEFAULT_LINES)); updatePreview(); if (state.report) renderReport(); });
+$("#floor-type").addEventListener("change", e => { state.floor_type = e.target.value; updatePreview(); });
+$("#unique-names").addEventListener("change", e => { state.unique_names = e.target.checked; updatePreview(); });
+$("#name-prefix").addEventListener("input", e => { state.name_prefix = e.target.value || "Group"; updatePreview(); });
+
+$("#fetch-report-btn").addEventListener("click", async () => {
+  const btn = $("#fetch-report-btn");
+  btn.disabled = true; btn.textContent = "Fetching report…";
+  try {
+    const ad_unit_ids = state.ad_units.map(u => u.ad_unit_id);
+    const res = await fetch("/mediation/builder/fetch-report", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ ad_unit_ids }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Fetch failed");
+    state.report = data.report || {};
+    $("#report-date-range").textContent = `Date range: ${data.start} → ${data.end} (last 7 days)`;
+    renderReport();
+    $("#report-section").style.display = "";
+    $("#report-section").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    alert("Error fetching report: " + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "📊 Fetch AdMob Report (Last 7 Days)";
+  }
+});
+
+function fmtPct(n) { return (n * 100).toFixed(2) + "%"; }
+function fmtUSD(n) { return "$" + (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function computeLines(avg, count) {
+  const TOP = {{ top_mult }}, STEP = {{ step_factor }};
+  let v = avg * TOP, out = [];
+  for (let i = 0; i < count; i++) { out.push(+v.toFixed(2)); v *= STEP; }
+  return out;
+}
+
+function renderReport() {
+  const wrap = $("#report-cards");
+  wrap.innerHTML = "";
+  state.ad_units.forEach(u => {
+    const m = (state.report || {})[u.ad_unit_id] || {};
+    const ecpm = m.ecpm_usd || 0;
+    const lines = computeLines(ecpm, state.line_count);
+
+    const card = document.createElement("div");
+    card.className = "report-card";
+    const planNote = `<div class="muted small" style="margin-top:8px">Will create <b>1</b> mediation group targeting this ad unit: <b>waterfall MANUAL lines</b> from your saved 3rd-party networks (one per network, at the computed tier eCPMs) + an <b>AdMob Network LIVE bidding line</b>. Save network credentials on the <b>/networks</b> page first — each saved network becomes one waterfall line.</div>`;
+
+    card.innerHTML = `
+      <div class="report-card-head">
+        <div><div class="report-card-title">${u.name || "(unnamed)"}</div><div class="mono small muted">${u.ad_unit_id} · ${u.ad_format}</div></div>
+        <div class="report-card-summary">Avg eCPM <b>${fmtUSD(ecpm)}</b> · Revenue <b>${fmtUSD(m.revenue_usd)}</b></div>
+      </div>
+      <div class="metric-grid">
+        <div class="metric"><span class="metric-label">Avg eCPM</span><span class="metric-value">${fmtUSD(ecpm)}</span></div>
+        <div class="metric"><span class="metric-label">Revenue</span><span class="metric-value good">${fmtUSD(m.revenue_usd)}</span></div>
+        <div class="metric"><span class="metric-label">Match Rate</span><span class="metric-value">${fmtPct(m.match_rate || 0)}</span></div>
+        <div class="metric"><span class="metric-label">Show Rate</span><span class="metric-value">${fmtPct(m.show_rate || 0)}</span></div>
+        <div class="metric"><span class="metric-label">Fill Rate</span><span class="metric-value">${fmtPct(m.fill_rate || 0)}</span></div>
+        <div class="metric"><span class="metric-label">RPM</span><span class="metric-value">${fmtUSD(m.rpm_usd)}</span></div>
+        <div class="metric"><span class="metric-label">Requests</span><span class="metric-value">${(m.ad_requests||0).toLocaleString()}</span></div>
+        <div class="metric"><span class="metric-label">Impressions</span><span class="metric-value">${(m.impressions||0).toLocaleString()}</span></div>
+      </div>
+      ${planNote}
+      <div class="line-table">
+        <div class="line-table-head"><div>Tier</div><div>eCPM (editable)</div><div>Source</div></div>
+        ${lines.map((v, i) => `
+          <div class="line-table-row">
+            <div class="mono small">${i+1}</div>
+            <input type="number" min="0" step="0.01" value="${v.toFixed(2)}" data-au="${u.ad_unit_id}" data-i="${i}" class="line-input" />
+            <div class="small muted">AdMob Network (MANUAL)</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    wrap.appendChild(card);
+  });
+}
+
+async function submitGroups(endpoint, label) {
+    const btn = document.getElementById(label === "push" ? "push-btn" : "generate-btn");
+    const items = state.ad_units.map(u => {
+      const lineInputs = $$(`.line-input[data-au="${u.ad_unit_id}"]`);
+      const lines = lineInputs.map(inp => +inp.value || 0);
+      return {
+        ad_unit_id: u.ad_unit_id, ad_unit_name: u.name, ad_format: u.ad_format,
+        metrics: (state.report || {})[u.ad_unit_id] || {},
+        lines,
+      };
+    });
+
+    if (label === "push") {
+      const totalLines = items.reduce((s, it) => s + it.lines.filter(l => l > 0).length, 0);
+      const summary = `Pre-flight check:\n\n` +
+        `• ${items.length} source ad unit(s) selected\n` +
+        `• ${totalLines} waterfall tier eCPM(s) computed\n\n` +
+        `Will create (via AdMob API), per source ad unit:\n` +
+        `• 1 mediation group targeting that ad unit\n` +
+        `• Waterfall MANUAL lines — one per 3rd-party network you saved\n` +
+        `  on /networks, at the computed tier eCPMs\n` +
+        `• 1 AdMob Network LIVE bidding line\n\n` +
+        `If you have not saved any 3rd-party network credentials on the\n` +
+        `/networks page, the group is still created but with 0 waterfall\n` +
+        `lines (only the AdMob Network bidding line).\n\n` +
+        `Continue?`;
+      if (!confirm(summary)) return;
+    }
+
+    const body = {
+      app_id: state.app_id, country_mode: state.country_mode,
+      countries: [...state.countries], floor_type: state.floor_type,
+      unique_names: state.unique_names, name_prefix: state.name_prefix,
+      include_bidding_networks: state.include_bidding_networks,
+      items,
+    };
+    btn.disabled = true; const orig = btn.textContent; btn.textContent = "Working...";
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Request failed");
+
+      let msg;
+      if (label === "push") {
+        const groups = data.groups || [];
+        const ok = groups.filter(g => g.status === "PUSHED").length;
+        const partial = groups.filter(g => g.status === "PUSHED_PARTIAL").length;
+        const failed = groups.filter(g => g.status === "PUSH_FAILED").length;
+        const inAdMob = ok + partial;
+        msg = `═══ PUSH RESULT ═══\n\n`;
+        const okCount = groups.filter(g => g.status === "PUSHED").length;
+        const partialCount = groups.filter(g => g.status === "PUSHED_PARTIAL").length;
+        const failCount = groups.filter(g => g.status === "PUSH_FAILED").length;
+        msg += `Mediation groups in AdMob: ${okCount}/${groups.length}`;
+        if (partialCount) msg += ` (${partialCount} partial)`;
+        msg += `\n`;
+        if (failCount) msg += `✗ Failed entirely: ${failCount}\n`;
+        msg += `\n`;
+        groups.slice(0, 20).forEach(g => {
+          const mark = g.status === "PUSHED" ? "✓"
+                     : g.status === "PUSHED_PARTIAL" ? "⚠" : "✗";
+          msg += `${mark} ${g.name}\n`;
+          msg += `   source ad unit: ${g.source_ad_unit_id}\n`;
+          if (g.admob_group_id)
+            msg += `   AdMob mediation group id: ${g.admob_group_id}\n`;
+          msg += `   Waterfall lines in group: ${g.waterfall_lines_actual ?? 0}`;
+          const nets = g.waterfall_networks || [];
+          if (nets.length) msg += `  (${nets.join(", ")})`;
+          msg += `\n`;
+          msg += `   Bidding line (AdMob Network): ${g.bidding_lines_actual ?? 0}\n`;
+          const tiers = g.waterfall_tier_ecpms || [];
+          if (tiers.length) {
+            msg += `   Computed tier eCPMs: ` +
+                   tiers.map(e => `$${Number(e).toFixed(2)}`).join(", ") + `\n`;
+          }
+          if ((g.waterfall_lines_actual ?? 0) === 0) {
+            msg += `   ⚠ 0 waterfall lines — save 3rd-party network creds on /networks\n`;
+          }
+          msg += `\n`;
+        });
+        if (groups.length > 20) msg += `\n…and ${groups.length - 20} more (see /mediation)\n`;
+
+        if ((data.push_errors || []).length) {
+          msg += `\n═══ ERRORS ═══\n`;
+          data.push_errors.slice(0, 15).forEach((e, i) => {
+            const tierInfo = e.tier ? ` (tier ${e.tier})` : "";
+            const stageInfo = e.stage ? ` at ${e.stage}` : "";
+            msg += `\n${i+1}. ad unit ${e.ad_unit_id}${tierInfo}${stageInfo}:\n   ${e.error}\n`;
+          });
+          if (data.push_errors.length > 15) msg += `\n…and ${data.push_errors.length - 15} more errors\n`;
+          const allErrs = data.push_errors.map(e => (e.error || "").toLowerCase()).join(" ");
+          if (allErrs.includes("permission") || allErrs.includes("403")) {
+            msg += `\n═══ HINT ═══\nAdMob Write API may not be enabled. Contact your AdMob account manager.`;
+          } else if (allErrs.includes("exhausted") || allErrs.includes("quota")) {
+            msg += `\n═══ HINT ═══\nQuota exhausted. Wait 60s and retry with fewer tiers / ad units.`;
+          }
+        }
+      } else {
+        msg = `Saved ${data.groups.length} draft group(s) locally (not pushed to AdMob).`;
+      }
+      alert(msg);
+      window.location = "/mediation";
+    } catch (err) {
+      alert("Error: " + err.message);
+      btn.disabled = false; btn.textContent = orig;
+    }
+}
+
+document.getElementById("push-btn").addEventListener("click", () => submitGroups("/mediation/builder/push-to-admob", "push"));
+document.getElementById("generate-btn").addEventListener("click", () => submitGroups("/mediation/builder/generate", "save"));
+
+let LOADED_ADMOB_GROUPS = [];
+
+document.getElementById("fetch-admob-groups-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("fetch-admob-groups-btn");
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = "Loading…";
+  try {
+    const res = await fetch("/mediation/builder/fetch-admob-groups", {method: "POST"});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Failed to load groups");
+    LOADED_ADMOB_GROUPS = data.groups || [];
+    const sel = document.getElementById("target-group-select");
+    sel.innerHTML = '<option value="">— Choose an AdMob group —</option>';
+    LOADED_ADMOB_GROUPS.forEach(g => {
+      const opt = document.createElement("option");
+      opt.value = g.mediation_group_id;
+      opt.textContent = `${g.display_name || g.mediation_group_id} · ${g.platform || "?"} · ${g.format || "?"} · ${g.line_count} line(s) · ${g.state}`;
+      sel.appendChild(opt);
+    });
+    document.getElementById("admob-groups-list").style.display = "";
+    if (!LOADED_ADMOB_GROUPS.length) {
+      document.getElementById("target-group-info").innerHTML = "<em>No groups returned.</em>";
+    }
+  } catch (err) {
+    alert("Error loading AdMob groups: " + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+});
+
+document.getElementById("target-group-select").addEventListener("change", e => {
+  const id = e.target.value;
+  const pushBtn = document.getElementById("push-existing-btn");
+  const info = document.getElementById("target-group-info");
+  if (!id) { pushBtn.disabled = true; info.textContent = ""; return; }
+  const g = LOADED_ADMOB_GROUPS.find(x => x.mediation_group_id === id);
+  if (!g) { pushBtn.disabled = true; return; }
+  pushBtn.disabled = false;
+  info.innerHTML = `Currently has <b>${g.line_count}</b> line(s). Targets: ${(g.ad_unit_ids || []).map(x => `<code>${x}</code>`).join(", ") || "(none)"}.`;
+});
+
+document.getElementById("push-existing-btn").addEventListener("click", async () => {
+  const sel = document.getElementById("target-group-select");
+  const groupId = sel.value;
+  if (!groupId) { alert("Pick a group first."); return; }
+  const g = LOADED_ADMOB_GROUPS.find(x => x.mediation_group_id === groupId);
+  if (!state.ad_units.length || !state.report) {
+    alert("Select an ad unit and fetch the AdMob report first.");
+    return;
+  }
+  const firstAu = state.ad_units[0];
+  const inputs = $$(`.line-input[data-au="${firstAu.ad_unit_id}"]`);
+  const ecpms = inputs.map(i => +i.value || 0).filter(v => v > 0);
+  if (!ecpms.length) { alert("No positive eCPMs to push."); return; }
+  if (!confirm(`Patch ${ecpms.length} line(s) into AdMob group "${g.display_name}"?`)) return;
+
+  const btn = document.getElementById("push-existing-btn");
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = "Patching…";
+  try {
+    const res = await fetch("/mediation/builder/push-to-existing", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        mediation_group_id: groupId,
+        ecpms,
+        group_display_name: g.display_name || groupId,
+      }),
+    });
+    const data = await res.json();
+    if (data.status === "failed") {
+      alert(`Failed to patch group.\n\nError: ${data.error}`);
+    } else {
+      const msg = data.status === "ok"
+        ? `✓ Patched ${data.lines_pushed} of ${data.lines_requested} lines.`
+        : `⚠ Partial: patched ${data.lines_pushed} of ${data.lines_requested} lines.`;
+      alert(msg);
+      window.location = "/mediation";
+    }
+  } catch (err) {
+    alert("Error: " + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+});
+
+// ============================================================
+// AdMob internal-API path — the backend creates real AdMob Network
+// waterfall lines using the user's saved admob.google.com session.
+// The checkbox reveals a session-paste panel + a push button.
+// ============================================================
+function refreshSessionStatus(saved, at) {
+  const el = document.getElementById("session-status");
+  if (!el) return;
+  el.innerHTML = saved
+    ? '<span class="pill pill-good">AdMob session saved</span> ' +
+      (at ? '<span class="muted">updated ' + at + '</span>' : '')
+    : '<span class="pill">No AdMob session saved yet</span>';
+}
+refreshSessionStatus(ADMOB_SESSION_SAVED, ADMOB_SESSION_AT);
+
+const __useInternalApiCb = $("#use-internal-api");
+if (__useInternalApiCb) {
+  __useInternalApiCb.addEventListener("change", e => {
+    state.use_internal_api = e.target.checked;
+    const panel = document.getElementById("internal-api-panel");
+    const acts = document.getElementById("internal-actions");
+    if (panel) panel.style.display = e.target.checked ? "" : "none";
+    if (acts) acts.style.display = e.target.checked ? "" : "none";
+  });
+}
+
+const __saveSessionBtn = document.getElementById("save-session-btn");
+if (__saveSessionBtn) {
+  __saveSessionBtn.addEventListener("click", async () => {
+    const curl = (document.getElementById("session-curl").value || "").trim();
+    if (!curl) { alert("Paste your AdMob cURL first."); return; }
+    __saveSessionBtn.disabled = true;
+    const orig = __saveSessionBtn.textContent;
+    __saveSessionBtn.textContent = "Saving...";
+    try {
+      const res = await fetch("/mediation/builder/save-admob-session", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ curl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Save failed");
+      refreshSessionStatus(true, data.saved_at);
+      document.getElementById("session-curl").value = "";
+      alert("AdMob session saved (cookie length " + data.cookie_len + "). " +
+            "It will be reused on every run until it expires.");
+    } catch (err) {
+      alert("Could not save session:\n\n" + err.message);
+    } finally {
+      __saveSessionBtn.disabled = false;
+      __saveSessionBtn.textContent = orig;
+    }
+  });
+}
+
+const __internalPushBtn = document.getElementById("internal-push-btn");
+if (__internalPushBtn) {
+  __internalPushBtn.addEventListener("click", async () => {
+    const items = state.ad_units.map(u => {
+      const lines = $$(`.line-input[data-au="${u.ad_unit_id}"]`)
+        .map(i => +i.value || 0);
+      return {
+        ad_unit_id: u.ad_unit_id, ad_unit_name: u.name,
+        ad_format: u.ad_format,
+        metrics: (state.report || {})[u.ad_unit_id] || {},
+        lines,
+      };
+    });
+    const total = items.reduce((s, it) => s + it.lines.filter(l => l > 0).length, 0);
+    if (!items.length || !total) {
+      alert("Select ad units and make sure their tier eCPMs are filled.");
+      return;
+    }
+    if (!confirm("Create real AdMob Network waterfall groups via the internal API?\n\n" +
+        "• " + items.length + " mediation group(s)\n" +
+        "• " + total + " waterfall tier line(s) total\n\n" +
+        "This writes directly to your AdMob account. Continue?")) return;
+    __internalPushBtn.disabled = true;
+    const orig = __internalPushBtn.textContent;
+    __internalPushBtn.textContent = "Creating... (may take a minute)";
+    const out = document.getElementById("internal-result");
+    out.style.display = ""; out.textContent = "Working...";
+    try {
+      const res = await fetch("/mediation/builder/push-internal", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          app_id: state.app_id, name_prefix: state.name_prefix,
+          unique_names: state.unique_names, items,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Request failed");
+      let msg = "";
+      (data.results || []).forEach(r => {
+        msg += (r.ok ? "OK    " : "FAIL  ") + r.group + "\n";
+        if (r.group_id) msg += "      AdMob group id: " + r.group_id + "\n";
+        (r.log || []).forEach(l => { msg += "      " + l + "\n"; });
+        if (r.error) msg += "      ERROR: " + r.error + "\n";
+        msg += "\n";
+      });
+      if (data.session_expired) {
+        msg += ">>> Your AdMob session expired. Paste a fresh cURL in the " +
+               "panel above, save it, then retry.\n";
+      }
+      out.textContent = msg || "No results returned.";
+      const okCount = (data.results || []).filter(r => r.ok).length;
+      if (okCount && !data.session_expired) {
+        alert(okCount + " group(s) created. Refresh AdMob → Mediation to confirm.");
+      }
+    } catch (err) {
+      out.textContent = "Error: " + err.message;
+    } finally {
+      __internalPushBtn.disabled = false;
+      __internalPushBtn.textContent = orig;
+    }
+  });
+}
+
+updatePreview();
+</script>
+{% endblock %}

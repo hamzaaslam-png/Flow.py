@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ app.name }} · Mediation Tool{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow"><a href="/apps">← Apps</a></p>
+  <h1 class="display">{{ app.name or "(unnamed app)" }}</h1>
+  <p class="mono small">{{ app.app_id }} · {{ app.platform }} · {{ app.package_name or "no store ID" }}</p>
+</section>
+<h2 class="section-title">Ad units</h2>
+{% if ad_units %}
+<table class="table">
+  <thead><tr><th>Name</th><th>Format</th><th>Ad Unit ID</th></tr></thead>
+  <tbody>
+    {% for u in ad_units %}<tr><td>{{ u.name or "(unnamed)" }}</td><td><span class="pill">{{ u.ad_format }}</span></td><td class="mono small">{{ u.ad_unit_id }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="empty">No ad units found for this app.</p>{% endif %}
+{% endblock %}
