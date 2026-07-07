@@ -172,16 +172,16 @@ def _timed(label: str, fn):
 # V1 = top of waterfall (highest eCPM), V10 = bottom. Pick the first N
 # multipliers when the user chooses N tiers.
 WATERFALL_TIER_MULTIPLIERS = [
-    3.0,    # V1 (top)
-    2.75,   # V2
-    2.5,    # V3
-    2.2,    # V4
-    1.9,    # V5
-    1.75,   # V6
+    5.5,    # V1 (top)
+    4.0,    # V2
+    3.3,    # V3
+    2.75,   # V4
+    2.25,   # V5
+    1.9,    # V6
     1.55,   # V7
     1.3,    # V8
     1.15,   # V9
-    0.9,    # V10 (bottom)
+    0.85,   # V10 (bottom)
 ]
 # Clamp every tier eCPM to this range — AdMob mediation hard limits.
 WATERFALL_MIN_ECPM = 0.2
@@ -2150,7 +2150,7 @@ TEMPLATE_FILES["base.html"] = r"""<!doctype html>
     </nav>
   </header>
   <main class="content">{% block content %}{% endblock %}</main>
-  <footer class="footer"><span>Flow</span><span class="footer-sep">·</span><span>1 group per source · Tier ad units · Replicated bidding mappings · Live audit</span></footer>
+  <footer class="footer"><span>Flow</span><span class="footer-sep">·</span><a href="/changelog" class="footer-version" title="What's new — click for the changelog">v{{ app_version }}</a><span class="footer-sep">·</span><span>1 group per source · Tier ad units · Replicated bidding mappings · Live audit</span></footer>
 </body>
 </html>"""
 
@@ -2404,6 +2404,31 @@ TEMPLATE_FILES["cleanup.html"] = r"""{% extends "base.html" %}
 })();
 </script>
 {% endif %}
+{% endblock %}"""
+
+TEMPLATE_FILES["changelog.html"] = r"""{% extends "base.html" %}
+{% block title %}Changelog · Flow{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">Changelog</p>
+  <h1 class="display">What's new in <em>Flow</em></h1>
+  <p class="lede">Every release and exactly what changed. You're on <b>v{{ app_version }}</b>.</p>
+</section>
+<div class="changelog">
+  {% for rel in changelog %}
+  <article class="changelog-entry{% if rel.version == app_version %} is-current{% endif %}">
+    <div class="changelog-head">
+      <span class="changelog-ver">v{{ rel.version }}</span>
+      {% if rel.version == app_version %}<span class="pill pill-good">current</span>{% endif %}
+      <span class="changelog-title">{{ rel.title }}</span>
+      <span class="changelog-date mono small">{{ rel.date }}</span>
+    </div>
+    <ul class="changelog-list">
+      {% for c in rel.changes %}<li>{{ c }}</li>{% endfor %}
+    </ul>
+  </article>
+  {% endfor %}
+</div>
 {% endblock %}"""
 
 TEMPLATE_FILES["apps.html"] = r"""{% extends "base.html" %}
@@ -3771,6 +3796,17 @@ code, .mono { font-family: var(--font-mono); }
 .topnav .logout { color: var(--ink-mute); font-size: 13px; }
 .content { max-width: 1240px; margin: 0 auto; padding: 36px 36px 80px; }
 .footer { max-width: 1240px; margin: 0 auto; padding: 24px 36px 40px; color: var(--ink-mute); font-size: 12.5px; }
+.footer-version { color: var(--accent); text-decoration: none; font-family: var(--font-mono); font-weight: 500; }
+.footer-version:hover { text-decoration: underline; }
+.changelog { max-width: 780px; }
+.changelog-entry { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 20px 24px; margin-bottom: 16px; }
+.changelog-entry.is-current { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(244,185,66,0.25); }
+.changelog-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.changelog-ver { font-family: var(--font-mono); font-size: 20px; font-weight: 600; color: var(--accent); }
+.changelog-title { font-family: var(--font-display); font-size: 16px; color: var(--ink); }
+.changelog-date { color: var(--ink-mute); margin-left: auto; }
+.changelog-list { margin: 0; padding-left: 20px; }
+.changelog-list li { margin: 7px 0; color: var(--ink-dim); font-size: 13.5px; line-height: 1.5; }
 .footer-sep { margin: 0 10px; opacity: 0.5; }
 .page-head { margin-bottom: 28px; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
@@ -4074,6 +4110,51 @@ _auto_migrate_sqlite()
 
 BUILD_TAG = "waterfall-v1alpha-batchcreate-v13-aes256-security"
 
+# ============================================================================
+# VERSION + CHANGELOG  (shown in the footer; click the version for details)
+# ============================================================================
+APP_VERSION = "1.2"
+CHANGELOG = [
+    {
+        "version": "1.2",
+        "date": "2026-07-07",
+        "title": "Waterfall tuning, more countries",
+        "changes": [
+            "Waterfall eCPM multipliers updated: V1 ×5.5 (top) → V10 ×0.85 (bottom).",
+            "Country list expanded to 140 — added Kuwait, Morocco, Oman, Azerbaijan, "
+            "Tanzania, Myanmar and many more (Middle East, Africa, Asia, Europe, LatAm).",
+            "Group-name prefix now auto-fills from the selected country (US, US_GB, …).",
+            "Max eCPM clamp ($1000) enforced on both the UI and the server before push.",
+        ],
+    },
+    {
+        "version": "1.1",
+        "date": "2026-06-29",
+        "title": "Accurate eCPM, faster & safer",
+        "changes": [
+            "eCPM now uses AdMob's Mediation 'Observed eCPM' (matches the AdMob UI) "
+            "with a Mediation/Network toggle.",
+            "Report window fixed to the last 7 COMPLETE days (excludes today).",
+            "Country-wise reports return real per-geo values.",
+            "Push runs as a background job with a live progress bar + count + snackbar — "
+            "no more request time-outs on large pushes.",
+            "Database made persistent & self-healing across deploys (no data loss).",
+            "Tool renamed to “Flow”.",
+        ],
+    },
+    {
+        "version": "1.0",
+        "date": "2026-06-12",
+        "title": "Initial release",
+        "changes": [
+            "AdMob mediation waterfall builder: tier ad units + one group per source.",
+            "Country-wise reports, AdMob account selector, cleanup screen.",
+            "Bidding network mappings, live audit.",
+            "AES-256-GCM encryption of stored tokens & credentials; Google OAuth.",
+        ],
+    },
+]
+
 # Values that must never be used as a real secret.
 _WEAK_SECRETS = {"", "change-me-in-env", "secret", "changeme", "password"}
 
@@ -4191,6 +4272,8 @@ async def _security_headers(request: Request, call_next):
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.state.templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# Expose the app version to every template (used in the footer link).
+app.state.templates.env.globals["app_version"] = APP_VERSION
 
 
 # ============================================================================
@@ -4384,6 +4467,20 @@ def logout(request: Request):
 # DASHBOARD
 # ============================================================================
 dash_router = APIRouter(tags=["dashboard"])
+
+
+@dash_router.get("/changelog", response_class=HTMLResponse)
+def changelog_view(request: Request, db: Session = Depends(get_db)):
+    # Public (no login required) so the footer "vX.Y" link works everywhere.
+    # Still resolve the user if signed in, so the nav bar stays consistent.
+    user = None
+    uid = request.session.get("user_id")
+    if uid:
+        user = db.query(User).filter(User.id == uid).first()
+    return tmpl(request).TemplateResponse(
+        "changelog.html",
+        {"request": request, "user": user, "changelog": CHANGELOG},
+    )
 
 
 @dash_router.get("/dashboard", response_class=HTMLResponse)

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Changelog · Flow{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">Changelog</p>
+  <h1 class="display">What's new in <em>Flow</em></h1>
+  <p class="lede">Every release and exactly what changed. You're on <b>v{{ app_version }}</b>.</p>
+</section>
+<div class="changelog">
+  {% for rel in changelog %}
+  <article class="changelog-entry{% if rel.version == app_version %} is-current{% endif %}">
+    <div class="changelog-head">
+      <span class="changelog-ver">v{{ rel.version }}</span>
+      {% if rel.version == app_version %}<span class="pill pill-good">current</span>{% endif %}
+      <span class="changelog-title">{{ rel.title }}</span>
+      <span class="changelog-date mono small">{{ rel.date }}</span>
+    </div>
+    <ul class="changelog-list">
+      {% for c in rel.changes %}<li>{{ c }}</li>{% endfor %}
+    </ul>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}
