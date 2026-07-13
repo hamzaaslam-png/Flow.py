@@ -2921,9 +2921,16 @@ const MAX_ECPM = {{ max_ecpm }};
 function computeLines(avg, count) {
   // V1 = highest (top), VN = lowest (bottom). Pick first `count` multipliers.
   // Each tier = base × Vx multiplier, clamped to [MIN_ECPM, MAX_ECPM].
+  //
+  // Low-eCPM handling: if the real average is BELOW the floor (MIN_ECPM), the
+  // raw multipliers would push almost every tier under the floor and clamp them
+  // all to the same value (e.g. base $0.06 -> V3..V10 all $0.20, no spread).
+  // Instead, use the floor itself as the base so the tiers still get a proper
+  // spread (V1 $1.10 ... down), and the bottom tier lands on exactly the floor.
+  const base = Math.max(avg, MIN_ECPM);
   return TIER_MULTIPLIERS.slice(0, Math.min(count, TIER_MULTIPLIERS.length))
     .map(m => {
-      const v = avg * m;
+      const v = base * m;
       return +Math.min(MAX_ECPM, Math.max(MIN_ECPM, v)).toFixed(2);
     });
 }
@@ -4125,6 +4132,9 @@ CHANGELOG = [
             "Tanzania, Myanmar and many more (Middle East, Africa, Asia, Europe, LatAm).",
             "Group-name prefix now auto-fills from the selected country (US, US_GB, …).",
             "Max eCPM clamp ($1000) enforced on both the UI and the server before push.",
+            "Low-eCPM ad units: when the 7-day average is below the $0.20 floor, "
+            "the floor is used as the base so tiers keep a proper spread "
+            "(V1 $1.10 … V10 $0.20) instead of collapsing to a flat $0.20.",
         ],
     },
     {
