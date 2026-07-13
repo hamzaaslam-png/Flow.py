@@ -101,6 +101,10 @@
       <h3 class="section-title" style="margin-top:6px">Selected configuration</h3>
       <div id="preview-summary" class="muted">No app selected yet.</div>
     </div>
+    <div class="preview-panel" id="selected-panel" style="margin-top:16px; display:none">
+      <p class="eyebrow">Selected ad units (<span id="sel-count">0</span>)</p>
+      <div id="selected-units"></div>
+    </div>
   </div>
 </div>
 
@@ -204,7 +208,31 @@ if (__incBidCb) {
   if (callout) callout.classList.toggle("is-on", __incBidCb.checked);
 }
 
+function renderSelectedUnits() {
+  const panel = $("#selected-panel"), wrap = $("#selected-units"), countEl = $("#sel-count");
+  if (!panel || !wrap) return;
+  const units = state.ad_units || [];
+  if (countEl) countEl.textContent = units.length;
+  if (!units.length) { panel.style.display = "none"; wrap.innerHTML = ""; return; }
+  panel.style.display = "";
+  wrap.innerHTML = units.map(u => `
+    <div class="sel-unit">
+      <div class="sel-unit-info">
+        <div class="sel-unit-name">${u.name || "(unnamed)"} <span class="pill">${u.ad_format}</span></div>
+        <div class="mono small muted">${u.ad_unit_id}</div>
+      </div>
+      <button type="button" class="sel-unit-remove" data-id="${u.id}" title="Remove">✕</button>
+    </div>`).join("");
+  wrap.querySelectorAll(".sel-unit-remove").forEach(b => {
+    b.addEventListener("click", () => {
+      state.ad_units = state.ad_units.filter(s => String(s.id) !== String(b.dataset.id));
+      renderAdUnits(); updatePreview();
+    });
+  });
+}
+
 function updatePreview() {
+  renderSelectedUnits();   // keep the "Selected ad units" list in sync
   const el = $("#preview-summary");
   if (!state.app_id) { el.innerHTML = '<span class="muted">No app selected yet.</span>'; return; }
   const lines = [];
@@ -244,7 +272,10 @@ function renderAdUnits() {
         `</div>`
       : "";
     card.innerHTML = `<div><div class="adunit-name">${u.name || "(unnamed)"} <span class="pill">${u.ad_format}</span></div><div class="adunit-id mono small">${u.ad_unit_id}</div>${existingInfo}</div><button type="button" class="btn-ghost btn-sm">${sel ? "Selected ✓" : "Select"}</button>`;
-    card.querySelector("button").addEventListener("click", () => {
+    // Whole card is clickable to toggle selection (not just the button).
+    // Skip when the user clicked an existing-group link inside the card.
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("a")) return;
       if (sel) state.ad_units = state.ad_units.filter(s => s.id !== u.id);
       else state.ad_units.push(u);
       renderAdUnits(); updatePreview();

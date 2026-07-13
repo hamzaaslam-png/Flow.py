@@ -125,10 +125,17 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .kv span { color: var(--ink-mute); }
 .kv b { color: var(--ink); font-weight: 500; }
 .adunit-cards { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding-right: 6px; }
-.adunit-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: rgba(0,0,0,0.18); border: 1px solid var(--line); border-radius: var(--radius); gap: 12px; }
+.adunit-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: rgba(0,0,0,0.18); border: 1px solid var(--line); border-radius: var(--radius); gap: 12px; cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+.adunit-card:hover { border-color: var(--ink-mute); background: rgba(255,255,255,0.03); }
 .adunit-card.is-selected { border-color: var(--accent); background: rgba(244,185,66,0.06); }
+.adunit-card.is-selected:hover { background: rgba(244,185,66,0.10); }
 .adunit-card .adunit-name { font-weight: 500; }
 .adunit-card .adunit-id { color: var(--ink-mute); }
+.sel-unit { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: rgba(0,0,0,0.18); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
+.sel-unit-info { min-width: 0; }
+.sel-unit-name { font-weight: 500; font-size: 13.5px; }
+.sel-unit-remove { flex: none; width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line-2); background: transparent; color: var(--bad); cursor: pointer; font-size: 14px; line-height: 1; }
+.sel-unit-remove:hover { border-color: var(--bad); background: rgba(224,79,79,0.08); }
 .country-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; max-height: 220px; overflow-y: auto; }
 .country-chip { background: var(--bg-3); border: 1px solid var(--line-2); color: var(--ink-dim); padding: 6px 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; }
 .country-chip:hover { border-color: var(--ink-mute); }

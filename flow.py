@@ -2609,6 +2609,10 @@ TEMPLATE_FILES["mediation_builder.html"] = r"""{% extends "base.html" %}
       <h3 class="section-title" style="margin-top:6px">Selected configuration</h3>
       <div id="preview-summary" class="muted">No app selected yet.</div>
     </div>
+    <div class="preview-panel" id="selected-panel" style="margin-top:16px; display:none">
+      <p class="eyebrow">Selected ad units (<span id="sel-count">0</span>)</p>
+      <div id="selected-units"></div>
+    </div>
   </div>
 </div>
 
@@ -2712,7 +2716,31 @@ if (__incBidCb) {
   if (callout) callout.classList.toggle("is-on", __incBidCb.checked);
 }
 
+function renderSelectedUnits() {
+  const panel = $("#selected-panel"), wrap = $("#selected-units"), countEl = $("#sel-count");
+  if (!panel || !wrap) return;
+  const units = state.ad_units || [];
+  if (countEl) countEl.textContent = units.length;
+  if (!units.length) { panel.style.display = "none"; wrap.innerHTML = ""; return; }
+  panel.style.display = "";
+  wrap.innerHTML = units.map(u => `
+    <div class="sel-unit">
+      <div class="sel-unit-info">
+        <div class="sel-unit-name">${u.name || "(unnamed)"} <span class="pill">${u.ad_format}</span></div>
+        <div class="mono small muted">${u.ad_unit_id}</div>
+      </div>
+      <button type="button" class="sel-unit-remove" data-id="${u.id}" title="Remove">✕</button>
+    </div>`).join("");
+  wrap.querySelectorAll(".sel-unit-remove").forEach(b => {
+    b.addEventListener("click", () => {
+      state.ad_units = state.ad_units.filter(s => String(s.id) !== String(b.dataset.id));
+      renderAdUnits(); updatePreview();
+    });
+  });
+}
+
 function updatePreview() {
+  renderSelectedUnits();   // keep the "Selected ad units" list in sync
   const el = $("#preview-summary");
   if (!state.app_id) { el.innerHTML = '<span class="muted">No app selected yet.</span>'; return; }
   const lines = [];
@@ -2752,7 +2780,10 @@ function renderAdUnits() {
         `</div>`
       : "";
     card.innerHTML = `<div><div class="adunit-name">${u.name || "(unnamed)"} <span class="pill">${u.ad_format}</span></div><div class="adunit-id mono small">${u.ad_unit_id}</div>${existingInfo}</div><button type="button" class="btn-ghost btn-sm">${sel ? "Selected ✓" : "Select"}</button>`;
-    card.querySelector("button").addEventListener("click", () => {
+    // Whole card is clickable to toggle selection (not just the button).
+    // Skip when the user clicked an existing-group link inside the card.
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("a")) return;
       if (sel) state.ad_units = state.ad_units.filter(s => s.id !== u.id);
       else state.ad_units.push(u);
       renderAdUnits(); updatePreview();
@@ -3895,10 +3926,17 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .kv span { color: var(--ink-mute); }
 .kv b { color: var(--ink); font-weight: 500; }
 .adunit-cards { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding-right: 6px; }
-.adunit-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: rgba(0,0,0,0.18); border: 1px solid var(--line); border-radius: var(--radius); gap: 12px; }
+.adunit-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: rgba(0,0,0,0.18); border: 1px solid var(--line); border-radius: var(--radius); gap: 12px; cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+.adunit-card:hover { border-color: var(--ink-mute); background: rgba(255,255,255,0.03); }
 .adunit-card.is-selected { border-color: var(--accent); background: rgba(244,185,66,0.06); }
+.adunit-card.is-selected:hover { background: rgba(244,185,66,0.10); }
 .adunit-card .adunit-name { font-weight: 500; }
 .adunit-card .adunit-id { color: var(--ink-mute); }
+.sel-unit { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: rgba(0,0,0,0.18); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
+.sel-unit-info { min-width: 0; }
+.sel-unit-name { font-weight: 500; font-size: 13.5px; }
+.sel-unit-remove { flex: none; width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line-2); background: transparent; color: var(--bad); cursor: pointer; font-size: 14px; line-height: 1; }
+.sel-unit-remove:hover { border-color: var(--bad); background: rgba(224,79,79,0.08); }
 .country-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; max-height: 220px; overflow-y: auto; }
 .country-chip { background: var(--bg-3); border: 1px solid var(--line-2); color: var(--ink-dim); padding: 6px 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; }
 .country-chip:hover { border-color: var(--ink-mute); }
@@ -4135,6 +4173,9 @@ CHANGELOG = [
             "Low-eCPM ad units: when the 7-day average is below the $0.20 floor, "
             "the floor is used as the base so tiers keep a proper spread "
             "(V1 $1.10 … V10 $0.20) instead of collapsing to a flat $0.20.",
+            "Builder: click ANYWHERE on an ad-unit card to select it (not just "
+            "the button); selected ad units are listed in the Live Preview panel "
+            "and can be removed from there.",
         ],
     },
     {
